@@ -39,7 +39,7 @@
   .btn-delete{background:#d9534f;color:white;padding:10px 12px;border-radius:8px;border:0;cursor:pointer}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
   .card{background:var(--card-bg);border-radius:12px;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,0.04);position:relative;border:1px solid #eef1ec;min-height:200px}
-  .card img{width:100%;height:140px;object-fit:cover;display:block;background:#f0f0f0}
+  .card img{width:100%;height:140px;object-fit:cover;display:block;background:#f0f0f0;cursor:pointer}
   .card-body{padding:12px}
   .name{font-weight:700;color:var(--primary)}
   .meta{color:var(--muted);font-size:13px;margin-top:6px}
@@ -47,18 +47,19 @@
   .card:hover .edit-icon{display:block}
   .table{width:100%;border-collapse:collapse;background:transparent}
   .table th,.table td{border:1px solid #e6eddf;padding:8px;text-align:left;background:#fff}
-  .table img{width:100px;height:60px;object-fit:cover;border-radius:6px}
+  .table img{width:100px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer}
   .admin-indicator{display:none;padding:6px 10px;border-radius:999px;background:var(--accent);color:var(--primary);font-weight:700}
   .admin-mode .admin-indicator{display:inline-block}
   .backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;z-index:999}
-  .modal{background:#fff;padding:16px;border-radius:12px;width:92%;max-width:420px;max-height:90vh;overflow-y:auto}
+  .modal{background:#fff;padding:16px;border-radius:12px;width:92%;max-width:820px;max-height:90vh;overflow-y:auto}
   .modal h3{margin:0 0 8px}
   .character{position:absolute;right:8px;bottom:-120px;width:220px;max-width:28%;opacity:0.98;pointer-events:none;}
   .loading{display:flex;align-items:center;justify-content:center;padding:40px;color:var(--muted)}
   .loading::after{content:'';display:inline-block;width:20px;height:20px;border:2px solid var(--muted);border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-left:10px}
   @keyframes spin{to{transform:rotate(360deg)}}
   #modeBadge{display:none;color:var(--muted);font-weight:700}
-  @media(max-width:600px){header p{display:none};.card img{height:120px};.table img{width:70px;height:50px};.character{width:140px;bottom:-40px}}
+  #searchInput{padding:8px 10px;border-radius:8px;border:1px solid #e6eddf;width:220px}
+  @media(max-width:600px){header p{display:none};.card img{height:120px};.table img{width:70px;height:50px};.character{width:140px;bottom:-40px}; #searchInput{width:120px}}
 </style>
 </head>
 <body>
@@ -74,6 +75,10 @@
   <div style="max-width:980px;margin:auto;padding:12px">
     <div class="controls">
       <button id="toggleView" class="view-toggle">테이블 보기</button>
+
+      <!-- 검색 입력 추가 -->
+      <input id="searchInput" placeholder="검색: 이름/장소/날짜">
+
       <div style="flex:1"></div>
       <button id="openAdmin" class="admin-btn">관리자</button>
       <div id="modeBadge">보기: 카드</div>
@@ -147,6 +152,9 @@ let lastSelectedIndex = null;
 /* 파일 선택 상태 (custom) */
 let selectedFile = null;
 
+/* 검색 상태 */
+let searchTerm = '';
+
 /* ---------- 요소 ---------- */
 const grid = document.getElementById('grid');
 const table = document.getElementById('table');
@@ -164,6 +172,7 @@ const modeBadge = document.getElementById('modeBadge');
 const pickFileBtn = document.getElementById('pickFileBtn');
 const fileNameSpan = document.getElementById('fileName');
 const hiddenFileInput = document.getElementById('inFile');
+const searchInput = document.getElementById('searchInput');
 
 /* ---------- 도우미 ---------- */
 function escape(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -240,9 +249,22 @@ async function save() {
 }
 
 /* ---------- 렌더링 ---------- */
+function getFilteredItems() {
+  if (!searchTerm) return items.slice();
+  const q = searchTerm.trim().toLowerCase();
+  return items.filter(it => {
+    const name = (it.name || '').toString().toLowerCase();
+    const place = (it.place || '').toString().toLowerCase();
+    const date = (it.date || '').toString().toLowerCase();
+    return name.includes(q) || place.includes(q) || date.includes(q);
+  });
+}
+
 function render() {
+  const displayItems = getFilteredItems();
+
   grid.innerHTML = '';
-  if(items.length === 0) {
+  if(displayItems.length === 0) {
     emptyGrid.style.display = 'block';
     emptyTable.style.display = 'block';
   } else {
@@ -250,7 +272,7 @@ function render() {
     emptyTable.style.display = 'none';
   }
 
-  items.forEach(it => {
+  displayItems.forEach(it => {
     const card = document.createElement('div');
     card.className = 'card';
     card.dataset.id = it.id;
@@ -276,20 +298,30 @@ function render() {
       if (adminMode) selectCard(it.id, e);
       else showDetail(it);
     });
+
+    // 카드 안의 이미지는 클릭 시 항상 사진 모달 열리게 (이미 카드 클릭도 처리하지만 이미지에 따로 이벤트 추가)
+    const imgEl = card.querySelector('img');
+    imgEl.addEventListener('click', (ev) => {
+      ev.stopPropagation(); // 카드의 선택/수정 동작과 분리
+      showDetail(it);
+    });
     
     if(adminMode) card.classList.add('show-edit');
     card.style.outline = selectedIds.has(it.id) ? '3px solid rgba(124,223,74,0.24)' : 'none';
     grid.appendChild(card);
   });
-  renderTable();
+  renderTable(displayItems);
 }
 
-function renderTable() {
-  if(items.length === 0) { table.innerHTML = ''; return; }
+function renderTable(displayItems) {
+  // displayItems는 필터된 목록을 기대. 만약 호출 시 인자 없으면 기본 items 사용
+  const list = displayItems || getFilteredItems();
+  if(list.length === 0) { table.innerHTML = ''; return; }
   let html = `<thead><tr><th>사진</th><th>물건 이름</th><th>장소</th><th>날짜</th>${adminMode?'<th>액션</th>':''}</tr></thead><tbody>`;
-  items.forEach(it => {
+  list.forEach(it => {
+    // 이미지 클릭으로 전체 보기 가능하도록 onclick 연결
     html += `<tr data-id="${it.id}">
-      <td><img src="${escape(it.photo || 'https://via.placeholder.com/400x300?text=No+Image')}" alt="${escape(it.name)}" style="max-width:120px;max-height:80px;object-fit:cover;border-radius:6px" loading="lazy" onerror="this.src='https://via.placeholder.com/400x300?text=No+Image'"></td>
+      <td><img src="${escape(it.photo || 'https://via.placeholder.com/400x300?text=No+Image')}" alt="${escape(it.name)}" style="max-width:120px;max-height:80px;object-fit:cover;border-radius:6px" loading="lazy" onerror="this.src='https://via.placeholder.com/400x300?text=No+Image'" onclick="showDetailById('${it.id}')"></td>
       <td>${escape(it.name)}</td>
       <td>${escape(it.place)}</td>
       <td>${escape(it.date)}</td>
@@ -322,13 +354,28 @@ function selectCard(id, e) {
 }
 
 function showDetail(it) {
+  // 이미지가 화면에 꽉 차게, but 최대 높이 제한(뷰포트)
   modal.innerHTML = `
     <h3>${escape(it.name)}</h3>
-    <div style="margin-top:8px"><img src="${escape(it.photo||'https://via.placeholder.com/800x600?text=No+Image')}" style="width:100%;border-radius:8px;max-height:300px;object-fit:cover" loading="lazy"></div>
+    <div style="margin-top:8px;text-align:center">
+      <img src="${escape(it.photo||'https://via.placeholder.com/1200x800?text=No+Image')}" style="width:100%;height:auto;max-height:80vh;object-fit:contain;border-radius:8px" loading="lazy" onerror="this.src='https://via.placeholder.com/1200x800?text=No+Image'">
+    </div>
     <div style="margin-top:10px;color:var(--muted)">${escape(it.place)} • ${escape(it.date)}</div>
-    <div style="margin-top:12px;text-align:right"><button onclick="closeModal()" class="btn-primary" style="padding:8px 16px">닫기</button></div>
+    <div style="margin-top:12px;display:flex;justify-content:space-between;gap:8px;align-items:center">
+      <div style="color:var(--muted);font-size:13px">ID: ${escape(it.id)}</div>
+      <div style="text-align:right">
+        <a href="${escape(it.photo||'')}" target="_blank" rel="noopener noreferrer" style="margin-right:8px;text-decoration:none"><button class="admin-btn" style="padding:8px 12px">원본 보기</button></a>
+        <button onclick="closeModal()" class="btn-primary" style="padding:8px 16px">닫기</button>
+      </div>
+    </div>
   `;
   backdrop.style.display = 'flex'; modal.style.display = 'block';
+}
+
+function showDetailById(id) {
+  const it = items.find(x => x.id === id);
+  if(!it) return;
+  showDetail(it);
 }
 
 function closeModal() { backdrop.style.display = 'none'; modal.style.display='none'; modal.innerHTML=''; }
@@ -424,6 +471,12 @@ hiddenFileInput.addEventListener('change', (ev) => {
     selectedFile = null;
     fileNameSpan.textContent = '(사진 없음)';
   }
+});
+
+/* ---------- 검색 입력 처리 ---------- */
+searchInput.addEventListener('input', (e) => {
+  searchTerm = e.target.value || '';
+  render();
 });
 
 /* ---------- 추가 (Cloudinary 업로드 활용) ---------- */
@@ -604,6 +657,7 @@ window.openEditModal = openEditModal;
 window.deleteItem = deleteItem;
 window.closeModal = closeModal;
 window.selectCard = selectCard;
+window.showDetailById = showDetailById;
 
 init();
 </script>
