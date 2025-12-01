@@ -6,6 +6,7 @@
 <title>분실물 찾기 — Jakarta Korean International School</title>
 <script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-storage-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/heic2any/0.0.4/heic2any.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/browser-image-compression/2.0.2/browser-image-compression.min.js"></script>
 <style>
@@ -49,6 +50,7 @@
   .loading{display:flex;align-items:center;justify-content:center;padding:40px;color:var(--muted)}
   .loading::after{content:'';display:inline-block;width:20px;height:20px;border:2px solid var(--muted);border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-left:10px}
   @keyframes spin{to{transform:rotate(360deg)}}
+  #modeBadge{display:none;color:var(--muted);font-weight:700}
   @media(max-width:600px){header p{display:none};.card img{height:120px};.table img{width:70px;height:50px};.character{width:140px;bottom:-40px}}
 </style>
 </head>
@@ -67,14 +69,14 @@
       <button id="toggleView" class="view-toggle">테이블 보기</button>
       <div style="flex:1"></div>
       <button id="openAdmin" class="admin-btn">관리자</button>
-      <div id="modeBadge" style="display:none;color:var(--muted);font-weight:700;width:8px"></div>
+      <div id="modeBadge">보기: 카드</div>
     </div>
 
     <div id="adminForm" class="admin-form" style="display:none">
       <div style="flex:1;min-width:160px"><input id="inName" type="text" placeholder="물건 이름"></div>
       <div style="flex:1;min-width:140px"><input id="inPlace" type="text" placeholder="장소 (예: 도서관)"></div>
       <div style="min-width:140px"><input id="inDate" type="date"></div>
-      <div style="min-width:180px"><input id="inFile" type="file" accept="image/*" capture="environment"></div>
+      <div style="min-width:180px"><input id="inFile" type="file" accept="image/*"></div>
       <div style="display:flex;gap:8px">
         <button id="btnAdd" class="btn-primary">추가</button>
         <button id="btnDeleteSelected" class="btn-delete">선택 삭제</button>
@@ -99,7 +101,7 @@
 </div>
 
 <script>
-/* 🔥 FIREBASE 설정 (당신의 config 그대로 사용!) */
+/* 🔥 FIREBASE 완전 설정 */
 const firebaseConfig = {
   apiKey: "AIzaSyBAdDlJFlNQHQqkJCC9R28da4vUuPKh1lg",
   authDomain: "jiks-lostandfound.firebaseapp.com",
@@ -111,6 +113,7 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database().ref('lostItems');
+const storage = firebase.storage();
 
 /* ---------- 상태 ---------- */
 let items = [];
@@ -132,49 +135,54 @@ const toggleViewBtn = document.getElementById('toggleView');
 const openAdminBtn = document.getElementById('openAdmin');
 const backdrop = document.getElementById('backdrop');
 const modal = document.getElementById('modal');
+const modeBadge = document.getElementById('modeBadge');
 
-/* ---------- 도우미 함수 ---------- */
+/* ---------- 도우미 ---------- */
 function escape(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-
 const ADMIN_PASSWORD = 'jiks1234';
 
-/* 🔥 HEIC 변환 + 이미지 압축 (아이폰 사진 문제 해결!) */
-async function processImage(file) {
+/* 🔥 이미지 처리 + Firebase Storage 업로드 */
+async function uploadImageToStorage(file) {
+  // 1. HEIC → JPEG 변환
   let processedFile = file;
-  
-  // 1. HEIC → JPEG 변환 (아이폰 사진)
-  if (file.type === 'image/heic' || file.type === 'image/HEIC' || file.name.toLowerCase().endsWith('.heic')) {
+  if (file.type === 'image/heic' || file.name.toLowerCase().endsWith('.heic')) {
     try {
       const convertedBlob = await heic2any({blob: file, toType: 'image/jpeg', quality: 0.8});
       processedFile = new File([convertedBlob], file.name.replace(/\.[^/.]+$/, '.jpg'), {type: 'image/jpeg'});
     } catch(e) {
-      console.warn('HEIC 변환 실패, 원본 사용:', e);
+      console.warn('HEIC 변환 실패:', e);
     }
   }
   
-  // 2. 이미지 압축 (모든 이미지)
+  // 2. 이미지 압축
   try {
-    const options = {
-      maxSizeMB: 1,
-      maxWidthOrHeight: 800,
-      useWebWorker: true
-    };
+    const options = { maxSizeMB: 1, maxWidthOrHeight: 800, useWebWorker: true };
     processedFile = await imageCompression(processedFile, options);
   } catch(e) {
-    console.warn('이미지 압축 실패:', e);
+    console.warn('압축 실패:', e);
   }
   
-  return processedFile;
+  // 3. Firebase Storage 업로드
+  const fileName = `lost/${Date.now()}_${processedFile.name}`;
+  const storageRef = storage.ref(fileName);
+  const uploadTask = storageRef.put(processedFile);
+  
+  return new Promise((resolve, reject) => {
+    uploadTask.on('state_changed', null, reject, async () => {
+      const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+      resolve(downloadURL);
+    });
+  });
 }
 
-/* 🔥 FIREBASE 저장/로드 */
+/* 🔥 Firebase 데이터 */
 async function load() {
   try {
     const snapshot = await db.once('value');
     const data = snapshot.val();
     return data ? Object.values(data) : [];
   } catch(e) {
-    console.error('Firebase 로드 실패:', e);
+    console.error('로드 실패:', e);
     return [];
   }
 }
@@ -185,7 +193,7 @@ async function save() {
     items.forEach(it => { data[it.id] = it; });
     await db.set(data);
   } catch(e) {
-    console.error('Firebase 저장 실패:', e);
+    console.error('저장 실패:', e);
   }
 }
 
@@ -239,7 +247,7 @@ function renderTable() {
   let html = `<thead><tr><th>사진</th><th>물건 이름</th><th>장소</th><th>날짜</th>${adminMode?'<th>액션</th>':''}</tr></thead><tbody>`;
   items.forEach(it => {
     html += `<tr data-id="${it.id}">
-      <td><img src="${escape(it.photo || 'https://via.placeholder.com/400x300?text=No+Image')}" alt="${escape(it.name)}" style="max-width:120px;max-height:80px;object-fit:cover;border-radius:6px" loading="lazy"></td>
+      <td><img src="${escape(it.photo || 'https://via.placeholder.com/400x300?text=No+Image')}" alt="${escape(it.name)}" style="max-width:120px;max-height:80px;object-fit:cover;border-radius:6px" loading="lazy" onerror="this.src='https://via.placeholder.com/400x300?text=No+Image'"></td>
       <td>${escape(it.name)}</td>
       <td>${escape(it.place)}</td>
       <td>${escape(it.date)}</td>
@@ -337,31 +345,33 @@ function exitAdmin() {
   render();
 }
 
-/* ---------- 추가 (HEIC 완벽 지원!) ---------- */
+/* ---------- 추가 (완벽한 이미지 업로드!) ---------- */
 document.getElementById('btnAdd').addEventListener('click', async () => {
   const name = document.getElementById('inName').value.trim();
   const place = document.getElementById('inPlace').value.trim();
   const date = document.getElementById('inDate').value || new Date().toISOString().split('T')[0];
   
-  if(!name) { alert('물건 이름 입력!'); return; }
+  if(!name) { alert('물건 이름 입력하세요!'); return; }
   
   const file = document.getElementById('inFile').files[0];
   let photo = '';
   
   if(file) {
     try {
-      const processedFile = await processImage(file); // 🔥 HEIC 변환 + 압축
-      const reader = new FileReader();
-      reader.onload = () => { photo = reader.result; };
-      reader.readAsDataURL(processedFile);
+      grid.innerHTML = '<div class="loading">사진 업로드 중...</div>';
+      photo = await uploadImageToStorage(file); // 🔥 Storage 업로드
     } catch(e) {
-      alert('이미지 처리 실패');
+      alert('사진 업로드 실패!');
       console.error(e);
+      grid.innerHTML = '';
       return;
     }
   }
   
-  items.unshift({ id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2,6), name, place, date, photo, timestamp: Date.now() });
+  items.unshift({ 
+    id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2,6), 
+    name, place, date, photo, timestamp: Date.now() 
+  });
   await save();
   clearAdminInputs();
   render();
@@ -429,12 +439,10 @@ function openEditModal(id) {
     
     if(f) {
       try {
-        const processedFile = await processImage(f);
-        const reader = new FileReader();
-        reader.onload = () => { it.photo = reader.result; };
-        reader.readAsDataURL(processedFile);
+        const photoUrl = await uploadImageToStorage(f);
+        it.photo = photoUrl;
       } catch(e) {
-        alert('이미지 처리 실패');
+        alert('사진 업로드 실패');
         return;
       }
     }
@@ -446,27 +454,30 @@ function openEditModal(id) {
   };
 }
 
-/* ---------- 뷰 전환 ---------- */
+/* ---------- 뷰 전환 (간단하게!) ---------- */
 toggleViewBtn.addEventListener('click', () => {
   viewIsTable = !viewIsTable;
   if(viewIsTable) {
-    gridView.style.display = 'none'; tableView.style.display = 'block';
+    gridView.style.display = 'none'; 
+    tableView.style.display = 'block';
     toggleViewBtn.textContent = '카드 보기';
-    document.getElementById('modeBadge').textContent = '테이블';
+    modeBadge.textContent = '테이블';
   } else {
-    gridView.style.display = 'block'; tableView.style.display = 'none';
+    gridView.style.display = 'block'; 
+    tableView.style.display = 'none';
     toggleViewBtn.textContent = '테이블 보기';
-    document.getElementById('modeBadge').textContent = '카드';
+    modeBadge.textContent = '카드';
   }
-  document.getElementById('modeBadge').style.display = 'inline';
 });
 
 /* ---------- 초기화 ---------- */
 async function init() {
+  grid.innerHTML = '<div class="loading">데이터 로딩 중...</div>';
   items = await load();
   document.getElementById('inDate').value = new Date().toISOString().split('T')[0];
-  gridView.style.display = 'block'; tableView.style.display = 'none';
-  document.getElementById('modeBadge').textContent = '카드';
+  gridView.style.display = 'block'; 
+  tableView.style.display = 'none';
+  modeBadge.textContent = '카드';
   render();
   
   // 실시간 업데이트
@@ -481,7 +492,6 @@ window.openEditModal = openEditModal;
 window.deleteItem = deleteItem;
 window.closeModal = closeModal;
 window.selectCard = selectCard;
-window.adminMode = () => adminMode;
 
 init();
 </script>
