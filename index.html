@@ -10,6 +10,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/heic2any/0.0.4/heic2any.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/browser-image-compression/2.0.2/browser-image-compression.min.js"></script>
 <style>
+  /* (원본 CSS 동일) */
   :root{
     --primary:#0B3D2E; --accent:#7CC242; --bg:#F4F9F0;
     --muted:#4b5a4d; --card-bg:#ffffff; --radius:10px;
@@ -76,7 +77,15 @@
       <div style="flex:1;min-width:160px"><input id="inName" type="text" placeholder="물건 이름"></div>
       <div style="flex:1;min-width:140px"><input id="inPlace" type="text" placeholder="장소 (예: 도서관)"></div>
       <div style="min-width:140px"><input id="inDate" type="date"></div>
-      <div style="min-width:180px"><input id="inFile" type="file" accept="image/*"></div>
+
+      <!-- 변경: 원래 파일 input은 보존하되 숨기고, 커스텀 버튼으로 파일 선택 -->
+      <div style="min-width:180px;display:flex;gap:6px;align-items:center">
+        <button id="pickFileBtn" type="button" class="admin-btn">파일 선택</button>
+        <span id="fileName" style="font-size:13px;color:var(--muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">(사진 없음)</span>
+        <!-- 실제 파일 input: 숨김, 폴백으로 사용 -->
+        <input id="inFile" type="file" accept="image/*" style="display:none">
+      </div>
+
       <div style="display:flex;gap:8px">
         <button id="btnAdd" class="btn-primary">추가</button>
         <button id="btnDeleteSelected" class="btn-delete">선택 삭제</button>
@@ -101,13 +110,14 @@
 </div>
 
 <script>
-/* 🔥 FIREBASE 완전 설정 */
+/* 🔥 FIREBASE 설정: storageBucket을 실제 버킷으로 수정했습니다. */
 const firebaseConfig = {
   apiKey: "AIzaSyBAdDlJFlNQHQqkJCC9R28da4vUuPKh1lg",
   authDomain: "jiks-lostandfound.firebaseapp.com",
   databaseURL: "https://jiks-lostandfound-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "jiks-lostandfound",
-  storageBucket: "jiks-lostandfound.firebasestorage.app",
+  /* <-- 여기를 정확한 버킷으로 바꿔주세요 (일반적으로 PROJECT_ID.appspot.com) */
+  storageBucket: "jiks-lostandfound.appspot.com",
   messagingSenderId: "299244412202",
   appId: "1:299244412202:web:a6e6e825141dc328249253"
 };
@@ -121,6 +131,9 @@ let adminMode = false;
 let viewIsTable = false;
 let selectedIds = new Set();
 let lastSelectedIndex = null;
+
+/* ---------- 파일 선택 상태 (변경) ---------- */
+let selectedFile = null; // 커스텀 파일 선택(폴백 포함)
 
 /* ---------- 요소 ---------- */
 const grid = document.getElementById('grid');
@@ -136,13 +149,17 @@ const openAdminBtn = document.getElementById('openAdmin');
 const backdrop = document.getElementById('backdrop');
 const modal = document.getElementById('modal');
 const modeBadge = document.getElementById('modeBadge');
+const pickFileBtn = document.getElementById('pickFileBtn');
+const fileNameSpan = document.getElementById('fileName');
+const hiddenFileInput = document.getElementById('inFile');
 
 /* ---------- 도우미 ---------- */
 function escape(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 const ADMIN_PASSWORD = 'jiks1234';
 
-/* 🔥 이미지 처리 + Firebase Storage 업로드 */
+/* 🔥 이미지 처리 + Firebase Storage 업로드 (기존 함수 사용) */
 async function uploadImageToStorage(file) {
+  if(!file) return '';
   // 1. HEIC → JPEG 변환
   let processedFile = file;
   if (file.type === 'image/heic' || file.name.toLowerCase().endsWith('.heic')) {
@@ -168,9 +185,17 @@ async function uploadImageToStorage(file) {
   const uploadTask = storageRef.put(processedFile);
   
   return new Promise((resolve, reject) => {
-    uploadTask.on('state_changed', null, reject, async () => {
-      const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
-      resolve(downloadURL);
+    uploadTask.on('state_changed', null, err => {
+      console.error('업로드 에러', err);
+      reject(err);
+    }, async () => {
+      try {
+        const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+        resolve(downloadURL);
+      } catch(err) {
+        console.error('다운로드 URL 획득 실패', err);
+        reject(err);
+      }
     });
   });
 }
@@ -342,10 +367,53 @@ function exitAdmin() {
   adminForm.style.display = 'none';
   selectedIds.clear();
   lastSelectedIndex = null;
+  selectedFile = null;
+  fileNameSpan.textContent = '(사진 없음)';
   render();
 }
 
-/* ---------- 추가 (완벽한 이미지 업로드!) ---------- */
+/* ---------- 파일 선택: showOpenFilePicker 우선, 폴백은 숨긴 input 클릭 ---------- */
+pickFileBtn.addEventListener('click', async () => {
+  // showOpenFilePicker가 지원되면 파일 선택기(파일 시스템)를 연다 -> 카메라 대신 파일 선택이 뜸(Chromium).
+  if (window.showOpenFilePicker) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        multiple: false,
+        types: [{
+          description: 'Images',
+          accept: {
+            'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.heic']
+          }
+        }]
+      });
+      const file = await handle.getFile();
+      if (file) {
+        selectedFile = file;
+        fileNameSpan.textContent = file.name;
+      }
+    } catch (e) {
+      // 사용자가 취소했거나, 예외 -> 폴백으로 숨긴 input 사용
+      hiddenFileInput.click();
+    }
+  } else {
+    // 폴백: 브라우저 기본 file input 열기 (iOS Safari 등에서는 카메라/갤러리 UI가 뜰 수 있음)
+    hiddenFileInput.click();
+  }
+});
+
+// 숨긴 input에서 선택되면 selectedFile에 저장
+hiddenFileInput.addEventListener('change', (ev) => {
+  const f = ev.target.files && ev.target.files[0];
+  if (f) {
+    selectedFile = f;
+    fileNameSpan.textContent = f.name;
+  } else {
+    selectedFile = null;
+    fileNameSpan.textContent = '(사진 없음)';
+  }
+});
+
+/* ---------- 추가 (업로드 시 selectedFile 사용) ---------- */
 document.getElementById('btnAdd').addEventListener('click', async () => {
   const name = document.getElementById('inName').value.trim();
   const place = document.getElementById('inPlace').value.trim();
@@ -353,7 +421,8 @@ document.getElementById('btnAdd').addEventListener('click', async () => {
   
   if(!name) { alert('물건 이름 입력하세요!'); return; }
   
-  const file = document.getElementById('inFile').files[0];
+  // selectedFile (showOpenFilePicker 또는 hidden input) 우선 사용
+  const file = selectedFile || (document.getElementById('inFile').files[0]);
   let photo = '';
   
   if(file) {
@@ -361,7 +430,7 @@ document.getElementById('btnAdd').addEventListener('click', async () => {
       grid.innerHTML = '<div class="loading">사진 업로드 중...</div>';
       photo = await uploadImageToStorage(file); // 🔥 Storage 업로드
     } catch(e) {
-      alert('사진 업로드 실패!');
+      alert('사진 업로드 실패! (콘솔 확인)');
       console.error(e);
       grid.innerHTML = '';
       return;
@@ -383,6 +452,8 @@ function clearAdminInputs() {
   document.getElementById('inPlace').value = '';
   document.getElementById('inDate').value = '';
   document.getElementById('inFile').value = '';
+  selectedFile = null;
+  fileNameSpan.textContent = '(사진 없음)';
 }
 
 /* ---------- 삭제/수정 ---------- */
@@ -408,12 +479,19 @@ function openEditModal(id) {
   const it = items.find(x => x.id === id);
   if(!it) return;
   
+  // 편집 모달용 임시 파일 변수
+  let editSelectedFile = null;
+  
   modal.innerHTML = `
     <h3>항목 수정</h3>
     <input id="eName" type="text" value="${escape(it.name)}" style="width:100%;padding:12px;border-radius:8px;border:1px solid #ddd;margin-top:8px" required>
     <input id="ePlace" type="text" value="${escape(it.place)}" style="width:100%;padding:12px;border-radius:8px;border:1px solid #ddd;margin-top:8px">
     <input id="eDate" type="date" value="${escape(it.date)}" style="width:100%;padding:12px;border-radius:8px;border:1px solid #ddd;margin-top:8px">
-    <input id="eFile" type="file" accept="image/*" style="width:100%;margin-top:8px">
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+      <button id="ePickFile" class="admin-btn" type="button">파일 선택</button>
+      <span id="eFileName" style="color:var(--muted)">${it.photo ? '기존 사진 있음' : '(사진 없음)'}</span>
+      <input id="eFile" type="file" accept="image/*" style="display:none">
+    </div>
     <div style="margin-top:16px;text-align:right;gap:8px;display:flex;justify-content:flex-end">
       <button id="cancelEdit" style="padding:8px 16px">취소</button>
       <button id="deleteEdit" class="btn-delete" style="padding:8px 12px">삭제</button>
@@ -422,6 +500,28 @@ function openEditModal(id) {
   `;
   backdrop.style.display = 'flex'; modal.style.display = 'block';
   
+  const ePick = document.getElementById('ePickFile');
+  const eFile = document.getElementById('eFile');
+  const eFileName = document.getElementById('eFileName');
+
+  ePick.addEventListener('click', async () => {
+    if (window.showOpenFilePicker) {
+      try {
+        const [handle] = await window.showOpenFilePicker({
+          multiple:false,
+          types: [{ description: 'Images', accept: {'image/*': ['.png','.jpg','.jpeg','.webp','.heic']} }]
+        });
+        const f = await handle.getFile();
+        if (f) { editSelectedFile = f; eFileName.textContent = f.name; }
+      } catch(e) { eFile.click(); }
+    } else eFile.click();
+  });
+
+  eFile.addEventListener('change', (ev) => {
+    const f = ev.target.files && ev.target.files[0];
+    if (f) { editSelectedFile = f; eFileName.textContent = f.name; }
+  });
+
   document.getElementById('cancelEdit').onclick = closeModal;
   document.getElementById('deleteEdit').onclick = () => {
     if(confirm('삭제?')) {
@@ -435,7 +535,7 @@ function openEditModal(id) {
     if(!n) { alert('이름 필수'); return; }
     const p = document.getElementById('ePlace').value.trim();
     const d = document.getElementById('eDate').value;
-    const f = document.getElementById('eFile').files[0];
+    const f = editSelectedFile;
     
     if(f) {
       try {
