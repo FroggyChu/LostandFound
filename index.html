@@ -4,14 +4,14 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>분실물 찾기 — Jakarta Korean International School</title>
+<script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/heic2any/0.0.4/heic2any.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/browser-image-compression/2.0.2/browser-image-compression.min.js"></script>
 <style>
   :root{
-    --primary:#0B3D2E; /* deep green */
-    --accent:#7CC242;  /* light green */
-    --bg:#F4F9F0;
-    --muted:#4b5a4d;
-    --card-bg:#ffffff;
-    --radius:10px;
+    --primary:#0B3D2E; --accent:#7CC242; --bg:#F4F9F0;
+    --muted:#4b5a4d; --card-bg:#ffffff; --radius:10px;
   }
   *{box-sizing:border-box}
   body{font-family:"Noto Sans KR",system-ui,-apple-system,"Segoe UI",Roboto,Arial;margin:0;background:var(--bg);color:#111}
@@ -19,13 +19,13 @@
   header img.logo{width:56px;height:56px;object-fit:contain;border-radius:8px;background:#fff;padding:6px}
   header h1{margin:0;font-size:18px}
   header p{margin:0;font-size:13px;opacity:0.9}
-  main{max-width:980px;margin:18px auto;padding:12px; position: relative;}
+  main{max-width:980px;margin:18px auto;padding:12px;position:relative;}
   .controls{display:flex;gap:8px;align-items:center;margin-bottom:12px}
-  .view-toggle, .admin-btn { padding:8px 12px;border-radius:8px;border:0;cursor:pointer;font-weight:700 }
+  .view-toggle,.admin-btn{padding:8px 12px;border-radius:8px;border:0;cursor:pointer;font-weight:700}
   .view-toggle{background:var(--accent);color:var(--primary)}
   .admin-btn{background:#fff;color:var(--primary);border:2px solid rgba(255,255,255,0.12)}
   .admin-form{display:none;background:var(--card-bg);padding:12px;border-radius:12px;border-left:6px solid var(--accent);box-shadow:0 6px 18px rgba(0,0,0,0.06);margin-bottom:14px;gap:8px;flex-wrap:wrap}
-  .admin-form input[type="text"], .admin-form input[type="date"]{padding:10px;border-radius:8px;border:1px solid #e6e8ee;width:100%}
+  .admin-form input[type="text"],.admin-form input[type="date"]{padding:10px;border-radius:8px;border:1px solid #e6e8ee;width:100%}
   .admin-form input[type="file"]{padding:6px;width:100%}
   .btn-primary{background:var(--primary);color:white;padding:10px 14px;border-radius:8px;border:0;cursor:pointer}
   .btn-delete{background:#d9534f;color:white;padding:10px 12px;border-radius:8px;border:0;cursor:pointer}
@@ -42,58 +42,39 @@
   .table img{width:100px;height:60px;object-fit:cover;border-radius:6px}
   .admin-indicator{display:none;padding:6px 10px;border-radius:999px;background:var(--accent);color:var(--primary);font-weight:700}
   .admin-mode .admin-indicator{display:inline-block}
-  .fab{display:none}
-  .fab-small{display:none}
   .backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;z-index:999}
-  .modal{background:#fff;padding:16px;border-radius:12px;width:92%;max-width:420px}
+  .modal{background:#fff;padding:16px;border-radius:12px;width:92%;max-width:420px;max-height:90vh;overflow-y:auto}
   .modal h3{margin:0 0 8px}
-  .character{
-    position:absolute;
-    right:8px;
-    bottom:-120px;
-    width:220px;
-    max-width:28%;
-    opacity:0.98;
-    pointer-events:none;
-  }
+  .character{position:absolute;right:8px;bottom:-120px;width:220px;max-width:28%;opacity:0.98;pointer-events:none;}
   .loading{display:flex;align-items:center;justify-content:center;padding:40px;color:var(--muted)}
   .loading::after{content:'';display:inline-block;width:20px;height:20px;border:2px solid var(--muted);border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-left:10px}
   @keyframes spin{to{transform:rotate(360deg)}}
-  @media(max-width:600px){
-    header p{display:none}
-    .card img{height:120px}
-    .table img{width:70px;height:50px}
-    .character{width:140px; bottom:-40px}
-  }
+  @media(max-width:600px){header p{display:none};.card img{height:120px};.table img{width:70px;height:50px};.character{width:140px;bottom:-40px}}
 </style>
 </head>
 <body>
 
 <header>
-  <img class="logo" id="site-logo" src="logo.png" alt="JIKS Logo" onerror="this.src='https://via.placeholder.com/56x56/0B3D2E/FFFFFF?text=JIKS'">
-  <div>
-    <h1>분실물 찾기</h1>
-    <p>Jakarta Indonesia Korean School</p>
-  </div>
+  <img class="logo" src="logo.png" alt="JIKS Logo" onerror="this.src='https://via.placeholder.com/56x56/0B3D2E/FFFFFF?text=JIKS'">
+  <div><h1>분실물 찾기</h1><p>Jakarta Indonesia Korean School</p></div>
   <div style="flex:1"></div>
   <div id="admin-indicator" class="admin-indicator">관리자 모드</div>
 </header>
 
 <main>
-  <div class="container" style="max-width:980px;margin:auto;padding:12px">
+  <div style="max-width:980px;margin:auto;padding:12px">
     <div class="controls">
       <button id="toggleView" class="view-toggle">테이블 보기</button>
       <div style="flex:1"></div>
       <button id="openAdmin" class="admin-btn">관리자</button>
-      <div style="width:8px"></div>
-      <div id="modeBadge" style="display:none;color:var(--muted);font-weight:700">보기: 카드</div>
+      <div id="modeBadge" style="display:none;color:var(--muted);font-weight:700;width:8px"></div>
     </div>
 
     <div id="adminForm" class="admin-form" style="display:none">
       <div style="flex:1;min-width:160px"><input id="inName" type="text" placeholder="물건 이름"></div>
       <div style="flex:1;min-width:140px"><input id="inPlace" type="text" placeholder="장소 (예: 도서관)"></div>
       <div style="min-width:140px"><input id="inDate" type="date"></div>
-      <div style="min-width:180px"><input id="inFile" type="file" accept="image/*"></div>
+      <div style="min-width:180px"><input id="inFile" type="file" accept="image/*" capture="environment"></div>
       <div style="display:flex;gap:8px">
         <button id="btnAdd" class="btn-primary">추가</button>
         <button id="btnDeleteSelected" class="btn-delete">선택 삭제</button>
@@ -106,30 +87,39 @@
     </section>
 
     <section id="tableView" style="display:none">
-      <table id="table" class="table" style="width:100%"></table>
+      <table id="table" class="table"></table>
       <div id="emptyTable" style="display:none;padding:18px;background:#fff;border-radius:10px;margin-top:12px;text-align:center;color:var(--muted)">등록된 분실물이 없습니다.</div>
     </section>
   </div>
-
-  <img class="character" id="character-img" src="character.png" alt="character" onerror="this.style.display='none'">
+  <img class="character" src="character.png" alt="character" onerror="this.style.display='none'">
 </main>
 
-<div id="backdrop" class="backdrop" aria-hidden="true">
-  <div id="modal" class="modal" role="dialog" aria-modal="true" style="display:none"></div>
+<div id="backdrop" class="backdrop">
+  <div id="modal" class="modal" style="display:none"></div>
 </div>
 
 <script>
-/* ---------- CONFIG & STATE ---------- */
-const STORAGE_KEY = 'jkis_lost_items_v5'; // 버전 업그레이드
+/* 🔥 FIREBASE 설정 (당신의 config 그대로 사용!) */
+const firebaseConfig = {
+  apiKey: "AIzaSyBAdDlJFlNQHQqkJCC9R28da4vUuPKh1lg",
+  authDomain: "jiks-lostandfound.firebaseapp.com",
+  databaseURL: "https://jiks-lostandfound-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "jiks-lostandfound",
+  storageBucket: "jiks-lostandfound.firebasestorage.app",
+  messagingSenderId: "299244412202",
+  appId: "1:299244412202:web:a6e6e825141dc328249253"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database().ref('lostItems');
+
+/* ---------- 상태 ---------- */
 let items = [];
 let adminMode = false;
 let viewIsTable = false;
 let selectedIds = new Set();
 let lastSelectedIndex = null;
-let isLoading = true;
-let isOnline = navigator.onLine;
 
-/* ---------- ELEMENTS ---------- */
+/* ---------- 요소 ---------- */
 const grid = document.getElementById('grid');
 const table = document.getElementById('table');
 const gridView = document.getElementById('gridView');
@@ -143,79 +133,66 @@ const openAdminBtn = document.getElementById('openAdmin');
 const backdrop = document.getElementById('backdrop');
 const modal = document.getElementById('modal');
 
-/* ---------- HELPERS ---------- */
-function save(){ 
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  } catch(e) {
-    console.warn('localStorage 저장 실패:', e);
+/* ---------- 도우미 함수 ---------- */
+function escape(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+const ADMIN_PASSWORD = 'jiks1234';
+
+/* 🔥 HEIC 변환 + 이미지 압축 (아이폰 사진 문제 해결!) */
+async function processImage(file) {
+  let processedFile = file;
+  
+  // 1. HEIC → JPEG 변환 (아이폰 사진)
+  if (file.type === 'image/heic' || file.type === 'image/HEIC' || file.name.toLowerCase().endsWith('.heic')) {
+    try {
+      const convertedBlob = await heic2any({blob: file, toType: 'image/jpeg', quality: 0.8});
+      processedFile = new File([convertedBlob], file.name.replace(/\.[^/.]+$/, '.jpg'), {type: 'image/jpeg'});
+    } catch(e) {
+      console.warn('HEIC 변환 실패, 원본 사용:', e);
+    }
   }
+  
+  // 2. 이미지 압축 (모든 이미지)
+  try {
+    const options = {
+      maxSizeMB: 1,
+      maxWidthOrHeight: 800,
+      useWebWorker: true
+    };
+    processedFile = await imageCompression(processedFile, options);
+  } catch(e) {
+    console.warn('이미지 압축 실패:', e);
+  }
+  
+  return processedFile;
 }
 
-function load(){
+/* 🔥 FIREBASE 저장/로드 */
+async function load() {
   try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
+    const snapshot = await db.once('value');
+    const data = snapshot.val();
+    return data ? Object.values(data) : [];
   } catch(e) {
-    console.warn('localStorage 로드 실패:', e);
+    console.error('Firebase 로드 실패:', e);
     return [];
   }
 }
 
-function genId(){ 
-  return 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2,6); 
-}
-
-function escape(s=''){ 
-  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); 
-}
-
-function compressImage(file, maxWidth=800, maxHeight=600, quality=0.8) {
-  return new Promise((resolve, reject) => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
-    
-    img.onload = function() {
-      const ratio = Math.min(maxWidth / img.width, maxHeight / img.height);
-      canvas.width = img.width * ratio;
-      canvas.height = img.height * ratio;
-      
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      
-      // 모바일에서 안정적인 JPEG 형식으로 저장
-      canvas.toBlob(resolve, 'image/jpeg', quality);
-    };
-    
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
-  });
-}
-
-async function fileToBase64(file) {
-  if (!file || file.size === 0) return '';
-  
-  // 이미지 크기 최적화 (특히 모바일용)
-  const blob = await compressImage(file);
-  return new Promise((res, rej) => {
-    const reader = new FileReader();
-    reader.onload = () => res(reader.result);
-    reader.onerror = rej;
-    reader.readAsDataURL(blob);
-  });
-}
-
-/* ---------- RENDER ---------- */
-function showLoading(show) {
-  if (show) {
-    grid.innerHTML = '<div class="loading">데이터 로딩 중...</div>';
+async function save() {
+  try {
+    const data = {};
+    items.forEach(it => { data[it.id] = it; });
+    await db.set(data);
+  } catch(e) {
+    console.error('Firebase 저장 실패:', e);
   }
 }
 
+/* ---------- 렌더링 ---------- */
 function render() {
-  // grid
   grid.innerHTML = '';
-  if(items.length === 0){
+  if(items.length === 0) {
     emptyGrid.style.display = 'block';
     emptyTable.style.display = 'block';
   } else {
@@ -223,12 +200,12 @@ function render() {
     emptyTable.style.display = 'none';
   }
 
-  for(const it of items){
+  items.forEach(it => {
     const card = document.createElement('div');
     card.className = 'card';
     card.dataset.id = it.id;
     card.innerHTML = `
-      <div class="edit-icon" title="수정" style="display: none !important;">✎</div>
+      <div class="edit-icon" title="수정">✎</div>
       <img src="${escape(it.photo || 'https://via.placeholder.com/800x600?text=No+Image')}" alt="${escape(it.name)}" loading="lazy" onerror="this.src='https://via.placeholder.com/800x600?text=No+Image'">
       <div class="card-body">
         <div class="name">${escape(it.name)}</div>
@@ -236,7 +213,6 @@ function render() {
       </div>
     `;
     
-    // **버그 수정 2: 관리자 모드에서만 편집 아이콘 표시**
     const editIcon = card.querySelector('.edit-icon');
     if (adminMode) {
       editIcon.style.display = 'block';
@@ -246,71 +222,56 @@ function render() {
       });
     }
     
-    card.addEventListener('click', (e) => {
-      if (adminMode) {
-        selectCard(it.id, e);
-      } else {
-        showDetail(it);
-      }
+    card.addEventListener('click', e => {
+      if (adminMode) selectCard(it.id, e);
+      else showDetail(it);
     });
     
     if(adminMode) card.classList.add('show-edit');
     card.style.outline = selectedIds.has(it.id) ? '3px solid rgba(124,223,74,0.24)' : 'none';
     grid.appendChild(card);
-  }
-
+  });
   renderTable();
 }
 
-function renderTable(){
-  if(items.length === 0){ 
-    table.innerHTML = ''; 
-    return; 
-  }
+function renderTable() {
+  if(items.length === 0) { table.innerHTML = ''; return; }
   let html = `<thead><tr><th>사진</th><th>물건 이름</th><th>장소</th><th>날짜</th>${adminMode?'<th>액션</th>':''}</tr></thead><tbody>`;
-  for(const it of items){
+  items.forEach(it => {
     html += `<tr data-id="${it.id}">
-      <td><img src="${escape(it.photo || 'https://via.placeholder.com/400x300?text=No+Image')}" alt="${escape(it.name)}" style="max-width:120px;max-height:80px;object-fit:cover;border-radius:6px" loading="lazy" onerror="this.src='https://via.placeholder.com/400x300?text=No+Image'"></td>
+      <td><img src="${escape(it.photo || 'https://via.placeholder.com/400x300?text=No+Image')}" alt="${escape(it.name)}" style="max-width:120px;max-height:80px;object-fit:cover;border-radius:6px" loading="lazy"></td>
       <td>${escape(it.name)}</td>
       <td>${escape(it.place)}</td>
       <td>${escape(it.date)}</td>
-      ${adminMode?`<td><button onclick="if(adminMode) openEditModal('${it.id}')" style="font-size:12px;padding:4px 8px;">수정</button> <button onclick="if(adminMode) deleteItem('${it.id}')" style="font-size:12px;padding:4px 8px;background:#d9534f;color:white;border:none;border-radius:4px;">삭제</button></td>` : ''}
+      ${adminMode?`<td><button onclick="openEditModal('${it.id}')" style="font-size:12px;padding:4px 8px;">수정</button> <button onclick="deleteItem('${it.id}')" style="font-size:12px;padding:4px 8px;background:#d9534f;color:white;border:none;border-radius:4px;">삭제</button></td>` : ''}
     </tr>`;
-  }
-  html += `</tbody>`;
+  });
+  html += '</tbody>';
   table.innerHTML = html;
 }
 
-/* ---------- SELECTION (관리자 모드에서만) ---------- */
-function selectCard(id, e){
-  if (!adminMode) return; // **보안 강화**
-  
+/* ---------- 선택/상세 ---------- */
+function selectCard(id, e) {
+  if (!adminMode) return;
   const idx = items.findIndex(x => x.id === id);
   if(idx === -1) return;
-
-  if(e && e.shiftKey && lastSelectedIndex !== null){
-    const start = Math.min(lastSelectedIndex, idx);
-    const end = Math.max(lastSelectedIndex, idx);
+  if(e.shiftKey && lastSelectedIndex !== null) {
+    const start = Math.min(lastSelectedIndex, idx), end = Math.max(lastSelectedIndex, idx);
     for(let i = start; i <= end; i++) selectedIds.add(items[i].id);
-  }
-  else if(e && (e.ctrlKey || e.metaKey)){
-    if(selectedIds.has(id)) selectedIds.delete(id);
-    else selectedIds.add(id);
+  } else if(e.ctrlKey || e.metaKey) {
+    if(selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
     lastSelectedIndex = idx;
-  }
-  else {
+  } else {
     selectedIds.clear();
     selectedIds.add(id);
     lastSelectedIndex = idx;
   }
-
-  document.querySelectorAll('.card').forEach(c=>{
+  document.querySelectorAll('.card').forEach(c => {
     c.style.outline = selectedIds.has(c.dataset.id) ? '3px solid rgba(124,223,74,0.24)' : 'none';
   });
 }
 
-/* ---------- DETAIL MODAL ---------- */
-function showDetail(it){
+function showDetail(it) {
   modal.innerHTML = `
     <h3>${escape(it.name)}</h3>
     <div style="margin-top:8px"><img src="${escape(it.photo||'https://via.placeholder.com/800x600?text=No+Image')}" style="width:100%;border-radius:8px;max-height:300px;object-fit:cover" loading="lazy"></div>
@@ -320,44 +281,38 @@ function showDetail(it){
   backdrop.style.display = 'flex'; modal.style.display = 'block';
 }
 
-function closeModal(){ 
-  backdrop.style.display = 'none'; 
-  modal.style.display='none'; 
-  modal.innerHTML=''; 
-}
+function closeModal() { backdrop.style.display = 'none'; modal.style.display='none'; modal.innerHTML=''; }
+backdrop.addEventListener('click', e => { if(e.target === backdrop) closeModal(); });
 
-/* ---------- ADMIN (보안 강화) ---------- */
-const ADMIN_PASSWORD = 'jiks1234'; // 프로덕션에서는 더 복잡한 비밀번호 사용
-
-openAdminBtn.addEventListener('click', ()=>{
-  if(!adminMode){
+/* ---------- 관리자 ---------- */
+openAdminBtn.addEventListener('click', () => {
+  if(!adminMode) {
     modal.innerHTML = `
       <h3>관리자 로그인</h3>
-      <div style="margin-top:8px"><input id="pwField" type="password" placeholder="비밀번호" style="width:100%;padding:12px;border-radius:8px;border:1px solid #ddd;font-size:16px"></div>
-      <div style="margin-top:12px;text-align:right;">
-        <button id="pwCancel" style="padding:8px 16px">취소</button> 
+      <input id="pwField" type="password" placeholder="비밀번호" style="width:100%;padding:12px;border-radius:8px;border:1px solid #ddd;font-size:16px;margin-top:8px">
+      <div style="margin-top:12px;text-align:right">
+        <button id="pwCancel" style="padding:8px 16px">취소</button>
         <button id="pwOk" class="btn-primary" style="padding:8px 16px">확인</button>
       </div>
       <div id="pwErr" style="color:#c33;margin-top:8px;display:none;font-weight:500"></div>
     `;
     backdrop.style.display = 'flex'; modal.style.display = 'block';
-    
     document.getElementById('pwCancel').onclick = closeModal;
-    document.getElementById('pwOk').onclick = ()=>{
+    document.getElementById('pwOk').onclick = () => {
       const v = document.getElementById('pwField').value.trim();
-      if(v === ADMIN_PASSWORD){
+      if(v === ADMIN_PASSWORD) {
         adminMode = true;
         enterAdmin();
         closeModal();
+        alert('관리자 모드 활성화!');
       } else {
-        const e = document.getElementById('pwErr'); 
-        e.textContent = '비밀번호가 틀립니다'; 
-        e.style.display = 'block';
+        document.getElementById('pwErr').innerHTML = '비밀번호 틀림';
+        document.getElementById('pwErr').style.display = 'block';
         document.getElementById('pwField').value = '';
       }
     };
   } else {
-    if(confirm('관리자 모드를 종료하시겠습니까?')) {
+    if(confirm('관리자 모드 종료?')) {
       adminMode = false;
       exitAdmin();
       openAdminBtn.textContent = '관리자';
@@ -365,7 +320,7 @@ openAdminBtn.addEventListener('click', ()=>{
   }
 });
 
-function enterAdmin(){
+function enterAdmin() {
   document.body.classList.add('admin-mode');
   adminIndicator.style.display = 'inline-block';
   adminForm.style.display = 'flex';
@@ -373,7 +328,7 @@ function enterAdmin(){
   render();
 }
 
-function exitAdmin(){
+function exitAdmin() {
   document.body.classList.remove('admin-mode');
   adminIndicator.style.display = 'none';
   adminForm.style.display = 'none';
@@ -382,93 +337,73 @@ function exitAdmin(){
   render();
 }
 
-/* ---------- ADD ITEM (모바일 최적화) ---------- */
-document.getElementById('btnAdd').addEventListener('click', async ()=>{
+/* ---------- 추가 (HEIC 완벽 지원!) ---------- */
+document.getElementById('btnAdd').addEventListener('click', async () => {
   const name = document.getElementById('inName').value.trim();
   const place = document.getElementById('inPlace').value.trim();
   const date = document.getElementById('inDate').value || new Date().toISOString().split('T')[0];
-
-  if(!name){ 
-    alert('물건 이름을 입력하세요'); 
-    document.getElementById('inName').focus();
-    return; 
-  }
-
+  
+  if(!name) { alert('물건 이름 입력!'); return; }
+  
   const file = document.getElementById('inFile').files[0];
   let photo = '';
   
-  if(file){
+  if(file) {
     try {
-      showLoading(true);
-      photo = await fileToBase64(file);
-    } catch(e){ 
-      console.error(e); 
-      alert('이미지 업로드 실패. 다시 시도해주세요.'); 
-      showLoading(false);
-      return; 
+      const processedFile = await processImage(file); // 🔥 HEIC 변환 + 압축
+      const reader = new FileReader();
+      reader.onload = () => { photo = reader.result; };
+      reader.readAsDataURL(processedFile);
+    } catch(e) {
+      alert('이미지 처리 실패');
+      console.error(e);
+      return;
     }
   }
-
-  items.unshift({ 
-    id: genId(), 
-    name, 
-    place, 
-    date, 
-    photo,
-    timestamp: Date.now()
-  });
   
-  save(); 
-  clearAdminInputs(); 
+  items.unshift({ id: 'item_' + Date.now() + '_' + Math.random().toString(36).slice(2,6), name, place, date, photo, timestamp: Date.now() });
+  await save();
+  clearAdminInputs();
   render();
-  showLoading(false);
-  alert('분실물이 등록되었습니다!');
+  alert('분실물 등록 완료!');
 });
 
-function clearAdminInputs(){ 
-  document.getElementById('inName').value='';
-  document.getElementById('inPlace').value='';
-  document.getElementById('inDate').value='';
-  document.getElementById('inFile').value='';
+function clearAdminInputs() {
+  document.getElementById('inName').value = '';
+  document.getElementById('inPlace').value = '';
+  document.getElementById('inDate').value = '';
+  document.getElementById('inFile').value = '';
 }
 
-/* ---------- DELETE ---------- */
-document.getElementById('btnDeleteSelected').addEventListener('click', ()=>{
-  if(!adminMode) return;
-  if(selectedIds.size === 0){ 
-    alert('삭제할 항목을 먼저 선택하세요 (카드 클릭)'); 
-    return; 
-  }
-  if(!confirm(`${selectedIds.size}개 항목을 삭제하시겠습니까?`)) return;
-  
-  items = items.filter(x=> !selectedIds.has(x.id));
+/* ---------- 삭제/수정 ---------- */
+document.getElementById('btnDeleteSelected').addEventListener('click', async () => {
+  if(!adminMode || selectedIds.size === 0) { alert('관리자 + 선택 필요'); return; }
+  if(!confirm(`${selectedIds.size}개 삭제?`)) return;
+  items = items.filter(x => !selectedIds.has(x.id));
   selectedIds.clear();
   lastSelectedIndex = null;
-  save(); 
+  await save();
   render();
 });
 
-function deleteItem(id){
-  if(!adminMode) return; // **중요: 관리자 모드 확인**
-  if(!confirm('정말 삭제하시겠습니까?')) return;
+function deleteItem(id) {
+  if(!adminMode) return;
+  if(!confirm('삭제?')) return;
   items = items.filter(x => x.id !== id);
-  save(); 
-  render();
+  save().then(render);
 }
 
-/* ---------- EDIT (관리자 전용) ---------- */
-function openEditModal(id){
-  if(!adminMode) return; // **보안: 관리자만**
-  
-  const it = items.find(x=>x.id===id);
+function openEditModal(id) {
+  if(!adminMode) return;
+  const it = items.find(x => x.id === id);
   if(!it) return;
   
   modal.innerHTML = `
     <h3>항목 수정</h3>
-    <div style="margin-top:8px"><input id="eName" type="text" value="${escape(it.name)}" style="width:100%;padding:12px;border-radius:8px;border:1px solid #ddd" required></div>
-    <div style="margin-top:8px"><input id="ePlace" type="text" value="${escape(it.place)}" style="width:100%;padding:12px;border-radius:8px;border:1px solid #ddd"></div>
-    <div style="margin-top:8px"><input id="eDate" type="date" value="${escape(it.date)}" style="width:100%;padding:12px;border-radius:8px;border:1px solid #ddd"></div>
-    <div style="margin-top:8px"><input id="eFile" type="file" accept="image/*" style="width:100%"></div>
+    <input id="eName" type="text" value="${escape(it.name)}" style="width:100%;padding:12px;border-radius:8px;border:1px solid #ddd;margin-top:8px" required>
+    <input id="ePlace" type="text" value="${escape(it.place)}" style="width:100%;padding:12px;border-radius:8px;border:1px solid #ddd;margin-top:8px">
+    <input id="eDate" type="date" value="${escape(it.date)}" style="width:100%;padding:12px;border-radius:8px;border:1px solid #ddd;margin-top:8px">
+    <input id="eFile" type="file" accept="image/*" style="width:100%;margin-top:8px">
     <div style="margin-top:16px;text-align:right;gap:8px;display:flex;justify-content:flex-end">
       <button id="cancelEdit" style="padding:8px 16px">취소</button>
       <button id="deleteEdit" class="btn-delete" style="padding:8px 12px">삭제</button>
@@ -478,101 +413,77 @@ function openEditModal(id){
   backdrop.style.display = 'flex'; modal.style.display = 'block';
   
   document.getElementById('cancelEdit').onclick = closeModal;
-  document.getElementById('deleteEdit').onclick = ()=> { 
-    if(confirm('삭제하시겠습니까?')){
-      items = items.filter(x=>x.id!==id); 
-      save(); 
-      closeModal(); 
-      render(); 
-    } 
+  document.getElementById('deleteEdit').onclick = () => {
+    if(confirm('삭제?')) {
+      items = items.filter(x => x.id !== id);
+      save().then(() => { closeModal(); render(); });
+    }
   };
   
-  document.getElementById('saveEdit').onclick = async ()=>{
-    const n = document.getElementById('eName').value.trim(); 
-    if(!n){ 
-      alert('이름은 필수입니다'); 
-      document.getElementById('eName').focus();
-      return; 
-    }
+  document.getElementById('saveEdit').onclick = async () => {
+    const n = document.getElementById('eName').value.trim();
+    if(!n) { alert('이름 필수'); return; }
     const p = document.getElementById('ePlace').value.trim();
     const d = document.getElementById('eDate').value;
     const f = document.getElementById('eFile').files[0];
     
-    if(f){
+    if(f) {
       try {
-        it.photo = await fileToBase64(f);
-      } catch(e){ 
-        console.error(e); 
-        alert('이미지 업로드 실패'); 
-        return; 
+        const processedFile = await processImage(f);
+        const reader = new FileReader();
+        reader.onload = () => { it.photo = reader.result; };
+        reader.readAsDataURL(processedFile);
+      } catch(e) {
+        alert('이미지 처리 실패');
+        return;
       }
     }
-    it.name = n; 
-    it.place = p; 
-    it.date = d;
-    it.timestamp = Date.now();
     
-    save(); 
-    closeModal(); 
+    it.name = n; it.place = p; it.date = d; it.timestamp = Date.now();
+    await save();
+    closeModal();
     render();
   };
 }
 
-/* ---------- VIEW TOGGLE ---------- */
-toggleViewBtn.addEventListener('click', ()=>{
+/* ---------- 뷰 전환 ---------- */
+toggleViewBtn.addEventListener('click', () => {
   viewIsTable = !viewIsTable;
-  if(viewIsTable){
-    gridView.style.display = 'none'; 
-    tableView.style.display = 'block';
-    toggleViewBtn.textContent = '카드 보기'; 
-    document.getElementById('modeBadge').textContent = '보기: 테이블';
+  if(viewIsTable) {
+    gridView.style.display = 'none'; tableView.style.display = 'block';
+    toggleViewBtn.textContent = '카드 보기';
+    document.getElementById('modeBadge').textContent = '테이블';
   } else {
-    gridView.style.display = 'block'; 
-    tableView.style.display = 'none';
-    toggleViewBtn.textContent = '테이블 보기'; 
-    document.getElementById('modeBadge').textContent = '보기: 카드';
+    gridView.style.display = 'block'; tableView.style.display = 'none';
+    toggleViewBtn.textContent = '테이블 보기';
+    document.getElementById('modeBadge').textContent = '카드';
   }
+  document.getElementById('modeBadge').style.display = 'inline';
 });
 
-/* ---------- INIT ---------- */
-async function init(){
-  showLoading(true);
-  
-  // 로컬 데이터부터 로드
-  items = load();
-  
-  // 오늘 날짜 기본값 설정
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('inDate').value = today;
-  
-  gridView.style.display = 'block'; 
-  tableView.style.display = 'none';
-  document.getElementById('modeBadge').textContent = '보기: 카드';
-  
+/* ---------- 초기화 ---------- */
+async function init() {
+  items = await load();
+  document.getElementById('inDate').value = new Date().toISOString().split('T')[0];
+  gridView.style.display = 'block'; tableView.style.display = 'none';
+  document.getElementById('modeBadge').textContent = '카드';
   render();
-  isLoading = false;
-  showLoading(false);
   
-  // 온라인/오프라인 상태 감지
-  window.addEventListener('online', () => {
-    isOnline = true;
-    console.log('온라인 상태');
-  });
-  window.addEventListener('offline', () => {
-    isOnline = false;
-    console.log('오프라인 상태');
+  // 실시간 업데이트
+  db.on('value', async snapshot => {
+    items = snapshot.val() ? Object.values(snapshot.val()) : [];
+    render();
   });
 }
 
-// 전역 함수들 (테이블에서만 사용)
-window.adminMode = false; // 보안을 위해 전역 변수도 보호
-window.openEditModal = function(id) { if(adminMode) openEditModal(id); };
-window.deleteItem = function(id) { if(adminMode) deleteItem(id); };
+// 전역 함수
+window.openEditModal = openEditModal;
+window.deleteItem = deleteItem;
 window.closeModal = closeModal;
 window.selectCard = selectCard;
+window.adminMode = () => adminMode;
 
 init();
 </script>
-
 </body>
 </html>
